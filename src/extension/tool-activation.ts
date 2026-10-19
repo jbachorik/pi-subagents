@@ -75,19 +75,39 @@ function applyRecordedSelection(pi: ExtensionAPI, ctx: ExtensionContext, mode: "
 		const recorded = new Set<string>();
 		const unloadedNames = new Set<string>();
 		const declaredSentinels = new Set<string>();
+		// A deliberate deselection is recorded as a removal against the declaration it removes, so a
+		// transcript that holds tool-selection messages but never declares a sentinel has lost the
+		// declaration itself (context compaction drops old system messages): absence here is not a
+		// choice, and replaying it as one deactivates the tools with no way back — the loader is not
+		// declared either, and /reload replays the same compacted transcript.
+		let declaredAnySentinel = false;
 		for (const message of messages) {
 			if (message.role !== "system") continue;
 			// Pi records an extension unload (update, reload) as a removal of each of its active tools, with no cause.
 			// While this extension is loaded, the loader, subagent or bg_wait stays declared, so a removal that leaves
 			// none of them is that unload, not a choice, and the selection from before it stands.
 			for (const tool of message.toolsRemoved ?? []) declaredSentinels.delete(tool.name);
-			for (const tool of message.toolsAdded ?? []) if (UNLOAD_SENTINELS.has(tool.name)) declaredSentinels.add(tool.name);
+			for (const tool of message.toolsAdded ?? []) if (UNLOAD_SENTINELS.has(tool.name)) {
+				declaredSentinels.add(tool.name);
+				declaredAnySentinel = true;
+			}
 			const unloaded = declaredSentinels.size === 0 && message.toolsRemoved?.some((tool) => UNLOAD_SENTINELS.has(tool.name));
 			for (const tool of message.toolsRemoved ?? []) {
 				if (unloaded) unloadedNames.add(tool.name);
 				else recorded.delete(tool.name);
 			}
 			for (const tool of message.toolsAdded ?? []) recorded.add(tool.name);
+		}
+		if (!declaredAnySentinel && mode === "auto") {
+			// Lost declaration: re-assert the eager tool set instead of the deselection the surviving
+			// transcript implies — idempotent while the tools are still declared (a compacted resume
+			// adds nothing), recovering after the removal this replay itself recorded earlier, and
+			// after /reload, which replays the same compacted transcript. The loader is never added:
+			// the surviving transcript did not declare it, and adding it is the mid-conversation
+			// tool change "auto" exists to avoid. "dynamic" keeps its existing replay: the loader
+			// always stays declared there, so the model can re-enable subagent itself.
+			setSelection(pi, true, false, true, replyOwed ? [PARENT_SUPERVISOR_NAME] : [], replyOwed || pi.getActiveTools().includes(PARENT_SUPERVISOR_NAME));
+			return false;
 		}
 		// "auto" never adds the loader to a transcript that did not declare it: that is itself a tool change.
 		const loaderSelected = mode === "dynamic" || recorded.has(LOADER_NAME);
