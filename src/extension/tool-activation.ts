@@ -98,16 +98,18 @@ function applyRecordedSelection(pi: ExtensionAPI, ctx: ExtensionContext, mode: "
 			}
 			for (const tool of message.toolsAdded ?? []) recorded.add(tool.name);
 		}
-		if (!declaredAnySentinel && mode === "auto") {
-			// Lost declaration: re-assert the eager tool set instead of the deselection the surviving
-			// transcript implies — idempotent while the tools are still declared (a compacted resume
-			// adds nothing), recovering after the removal this replay itself recorded earlier, and
-			// after /reload, which replays the same compacted transcript. The loader is never added:
-			// the surviving transcript did not declare it, and adding it is the mid-conversation
-			// tool change "auto" exists to avoid. "dynamic" keeps its existing replay: the loader
-			// always stays declared there, so the model can re-enable subagent itself.
-			setSelection(pi, true, false, true, replyOwed ? [PARENT_SUPERVISOR_NAME] : [], replyOwed || pi.getActiveTools().includes(PARENT_SUPERVISOR_NAME));
-			return false;
+		if (!declaredAnySentinel) {
+			// The surviving transcript never declares a sentinel. A deliberate removal is always
+			// recorded against a surviving declaration, so absence here is not a choice: compaction
+			// dropped the declaration, and a removal echo without it could also be an operator's
+			// choice recorded after the compaction boundary. Compaction drops messages, not the
+			// session's tool state, so the live selection is the only reliable evidence — keep it.
+			// Deactivating on this evidence would lose the eager tool set for good; re-activating
+			// would break a cold session's contract and undo that operator removal. Only a reply
+			// owed to a child request still forces its supervisor tool.
+			const keeps = (name: string) => pi.getActiveTools().includes(name);
+			setSelection(pi, keeps(SUBAGENT_NAME), keeps(LOADER_NAME), keeps(WAIT_NAME), replyOwed ? [PARENT_SUPERVISOR_NAME] : [], replyOwed || keeps(PARENT_SUPERVISOR_NAME));
+			return keeps(LOADER_NAME);
 		}
 		// "auto" never adds the loader to a transcript that did not declare it: that is itself a tool change.
 		const loaderSelected = mode === "dynamic" || recorded.has(LOADER_NAME);

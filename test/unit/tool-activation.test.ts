@@ -130,6 +130,8 @@ describe("subagent tool activation", () => {
 		const tool = { name: "subagent", description: "historical", parameters: { type: "object" } };
 		const history = [{ role: "system", content: "", toolsAdded: [], timestamp: 1 }];
 		const cold = createRuntime(history, [], [], DYNAMIC);
+		// Real Pi restores the session's tool state on start; a cold transcript restores loader only.
+		cold.select(["read", "subagents_enable"]);
 		await cold.emit("session_start", { type: "session_start", reason: "reload" });
 		assert.equal(cold.active().includes("subagent"), false);
 		await cold.emit("session_tree", { type: "session_tree", newLeafId: null, oldLeafId: null });
@@ -360,42 +362,38 @@ describe("toolActivation modes", () => {
 		assert.ok(unaffected.active().includes("subagent"), "unaffected: subagent");
 	});
 
-	it("treats a compacted-away declaration as lost, not deselected", async () => {
-		// Context compaction drops the session-start declaration while other extensions' tool-selection
-		// messages survive, so the replay runs with no sentinel evidence. In "auto" the eager tool set
-		// stands (idempotent on resume, no loader added), in "dynamic" the loader stands and subagent
-		// only while still active, and a deliberate removal with a surviving declaration stays honored.
+	it("keeps the live selection when compaction removes the declaration evidence", async () => {
+		// Compaction drops the session-start declaration while other extensions' tool-selection
+		// messages survive. Compaction drops messages, not the session's tool state, so the live
+		// selection is the evidence the replay keeps: an eager session stays eager (no tool change,
+		// no loader added), a loader-only session stays cold, and a removal recorded after the
+		// compaction boundary is honored, because a removal echo without its declaration cannot be
+		// told apart from an operator's choice.
 		const surviving = declared(["read", "other_extension_tool"]);
-		const stillActive = ["read", "subagent", "contact_supervisor", "bg_wait", "subagent_supervisor"];
+		const eagerAuto = ["read", "subagent", "contact_supervisor", "bg_wait", "subagent_supervisor"];
 
 		const resumed = createRuntime([surviving], [], [], { model: INCOMPATIBLE });
-		resumed.select(stillActive);
+		resumed.select(eagerAuto);
 		await resumed.emit("session_start", { type: "session_start", reason: "resume" });
-		for (const name of stillActive) assert.ok(resumed.active().includes(name), `resume: ${name}`);
-		assert.equal((await startAgent(resumed)).includes("subagents_enable"), false, "resume: no loader");
+		for (const name of eagerAuto) assert.ok(resumed.active().includes(name), `resume: ${name}`);
+		assert.equal((await startAgent(resumed)).includes("subagents_enable"), false, "resume: no loader added");
 
-		// /reload after this replay itself recorded the removal: the echo without a surviving
-		// declaration is not a choice either, and the eager tool set comes back.
-		const echo = declared([], ["subagent", "contact_supervisor", "bg_wait", "subagent_supervisor"]);
-		const reloaded = createRuntime([surviving, echo], [], [], { model: INCOMPATIBLE });
-		reloaded.select(["read"]);
-		await reloaded.emit("session_start", { type: "session_start", reason: "reload" });
-		for (const name of stillActive) assert.ok(reloaded.active().includes(name), `reload: ${name}`);
-		assert.equal((await startAgent(reloaded)).includes("subagents_enable"), false, "reload: no loader");
+		const coldAuto = createRuntime([surviving], [], [], { model: COMPATIBLE });
+		coldAuto.select(["read", "subagents_enable"]);
+		await coldAuto.emit("session_start", { type: "session_start", reason: "resume" });
+		assert.equal(coldAuto.active().includes("subagent"), false, "cold: stays cold");
+		assert.ok((await startAgent(coldAuto)).includes("subagents_enable"), "cold: loader kept");
 
-		const dynamicOff = createRuntime([surviving], [], [], { ...DYNAMIC, model: INCOMPATIBLE });
-		dynamicOff.select(["read", "subagents_enable"]);
-		await dynamicOff.emit("session_start", { type: "session_start", reason: "resume" });
-		assert.equal(dynamicOff.active().includes("subagent"), false, "dynamic: replay keeps subagent off");
-		assert.ok((await startAgent(dynamicOff)).includes("subagents_enable"), "dynamic: loader stays for in-band recovery");
+		const removedAfterCompaction = createRuntime([surviving, declared([], ["subagent", "contact_supervisor"])], [], [], { model: INCOMPATIBLE });
+		removedAfterCompaction.select(["read"]);
+		await removedAfterCompaction.emit("session_start", { type: "session_start", reason: "resume" });
+		assert.equal(removedAfterCompaction.active().includes("subagent"), false, "removal echo honored");
 
-		// A removal recorded against a surviving declaration is still a deliberate deselect.
-		const deliberate = createRuntime([
-			declared(["read", "subagent", "contact_supervisor", "bg_wait", "subagent_supervisor"]),
-			declared([], ["subagent", "contact_supervisor"]),
-		], [], [], { model: INCOMPATIBLE });
-		await deliberate.emit("session_start", { type: "session_start", reason: "resume" });
-		assert.equal(deliberate.active().includes("subagent"), false, "deliberate removal stays deselected");
+		const dynamicSession = createRuntime([surviving], [], [], { ...DYNAMIC, model: INCOMPATIBLE });
+		dynamicSession.select(["read", "subagents_enable"]);
+		await dynamicSession.emit("session_start", { type: "session_start", reason: "resume" });
+		assert.equal(dynamicSession.active().includes("subagent"), false, "dynamic: stays off");
+		assert.ok((await startAgent(dynamicSession)).includes("subagents_enable"), "dynamic: loader kept");
 	});
 
 	it("keeps bg_wait and subagent_supervisor as a resumed transcript recorded them, and recognises an unload without bg_wait", async () => {
