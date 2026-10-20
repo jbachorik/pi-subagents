@@ -70,7 +70,10 @@ function applyRecordedSelection(pi: ExtensionAPI, ctx: ExtensionContext, mode: "
 	if (!available.some((tool) => tool.name === LOADER_NAME)) return true;
 	// SAFETY: The running Pi session manager exposes buildSessionContext, but its read-only extension type omits it.
 	const messages = (ctx.sessionManager as typeof ctx.sessionManager & { buildSessionContext(): { messages: ToolSelectionMessage[] } }).buildSessionContext().messages;
-	if (hasNativeToolSelection(messages)) {
+	// A compaction without a checkpoint leaves its summary first, with no system message before it: the
+	// declarations from before it are lost, even when no tool selection was recorded after it.
+	const lost = messages.find((message) => message.role === "system" || message.role === "compactionSummary")?.role === "compactionSummary";
+	if (lost || hasNativeToolSelection(messages)) {
 		// Replayed here because a package-local pi-ai may be older than the running Pi.
 		const recorded = new Set<string>();
 		const unloadedNames = new Set<string>();
@@ -100,13 +103,10 @@ function applyRecordedSelection(pi: ExtensionAPI, ctx: ExtensionContext, mode: "
 				evidenced.add(tool.name);
 			}
 		}
-		// A compaction without a checkpoint leaves its summary first, with no system message before it: the
-		// declarations from before it are lost. The loader and subagent record one activation state (cold, warm,
-		// eager); bg_wait and subagent_supervisor are declared on their own. Only when the activation state itself is
-		// lost is it decided as for a new session. The live tools are no evidence: Pi restores them from this
-		// transcript, or activates every extension tool on /reload.
-		const firstStateful = messages.find((message) => message.role === "system" || message.role === "compactionSummary");
-		const lost = firstStateful?.role === "compactionSummary";
+		// The loader and subagent record one activation state (cold, warm, eager); bg_wait and subagent_supervisor
+		// are declared on their own. Only when the activation state itself is lost is it decided as for a new
+		// session. The live tools are no evidence: Pi restores them from this transcript, or activates every
+		// extension tool on /reload.
 		const fresh = lost && !evidenced.has(LOADER_NAME) && !evidenced.has(SUBAGENT_NAME);
 		const startsEager = fresh && mode === "auto" && !addsToolsWithoutCheckpoint(ctx.model);
 		// Otherwise "auto" never adds the loader to a transcript that did not declare it: that is itself a tool change.

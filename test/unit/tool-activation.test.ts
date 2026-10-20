@@ -525,6 +525,8 @@ describe("toolActivation modes", () => {
 			["lost, enable survives", [compacted, other, declared(unit)], { model: INCOMPATIBLE }, ["other_extension_tool", ...unit]],
 			["lost, nothing survives", [compacted, other], { model: INCOMPATIBLE }, []],
 			["lost, nothing survives", [compacted, other], { model: COMPATIBLE }, []],
+			["lost, no tool selection survives", [compacted, { role: "user", content: "next", timestamp: 0 }], { model: INCOMPATIBLE }, []],
+			["lost, no tool selection survives", [compacted, { role: "user", content: "next", timestamp: 0 }], { model: COMPATIBLE }, []],
 			["deliberate removal", [compacted, declared(["bg_wait", "subagent", "contact_supervisor"]), declared([], ["subagent", "contact_supervisor"])], { model: INCOMPATIBLE }, ["bg_wait"]],
 			["dynamic lost", [compacted, other, declared(["bg_wait"])], { ...DYNAMIC, model: INCOMPATIBLE }, ["other_extension_tool", "bg_wait"]],
 			["intact, never declared", [other], { model: COMPATIBLE }, ["other_extension_tool"]],
