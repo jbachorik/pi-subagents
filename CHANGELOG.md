@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- Agent files with a blank line inside a nested frontmatter block (a key like `runner:` with indented content) no longer have the block silently truncated at that blank line, so tool allowlists, permissions, acceptance criteria, and memory blocks that were previously cut off at a blank line start using their full content; literal `|`/`|-` and folded `>`/`>-` block scalars keep their exact previous values, including trailing newlines (#3089)
+- A blank line inside an indented frontmatter block, such as an `external-cli` runner whose script argument has an empty line, cut the value off at that line and dropped the rest of the agent's settings below it. The whole block is now read. Lists and blocks that used to stop at a blank line, such as `tools:`, now include their later entries, so an agent can get tools it did not get before. `|` and `>` blocks are unchanged. Thanks to [@jbachorik](https://github.com/jbachorik). (#3089)
 
 ## [0.83.0] - 2026-10-25
 

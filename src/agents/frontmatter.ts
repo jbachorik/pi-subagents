@@ -180,6 +180,8 @@ function flushBlockLines(blockLines: string[], folded: boolean, literal: boolean
 
 /**
  * Drop exactly-empty lines at the start and end of a nested-block value.
+ * After the last content line, whitespace-only lines are kept only up to the
+ * first exactly-empty line, where the old parser ended the block.
  * Only empty-indicator (nested) blocks are trimmed: the old parser never
  * collected them, so keeping them would append a stray trailing newline (or a
  * leading one the single ^\n replace misses) to previously-clean values.
@@ -187,9 +189,11 @@ function flushBlockLines(blockLines: string[], folded: boolean, literal: boolean
  * byte-identical to the pre-blank-line-fix parser.
  */
 function trimEdgeEmptyLines(lines: string[]): string[] {
+	let last = lines.length;
+	while (last > 0 && lines[last - 1]!.trim() === "") last--;
+	let end = last;
+	while (end < lines.length && lines[end] !== "") end++;
 	let start = 0;
-	let end = lines.length;
-	while (start < end && lines[start] === "") start++;
-	while (end > start && lines[end - 1] === "") end--;
+	while (start < last && lines[start] === "") start++;
 	return lines.slice(start, end);
 }

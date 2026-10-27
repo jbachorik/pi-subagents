@@ -384,6 +384,7 @@ describe("blank lines in nested frontmatter blocks", () => {
 	it("keeps whitespace-only trailing lines collected as before", () => {
 		const nested = fm("runner:\n  type: x\n  \nname: z\n");
 		assert.equal(nested.frontmatter.runner, "type: x\n");
+		assert.equal(fm("async:\n  true\n\n  \nname: x\n").frontmatter.async, "true");
 		const literal = fm("prompt: |\n  a\n  \nname: x\n");
 		assert.equal(literal.frontmatter.prompt, "a\n");
 	});
