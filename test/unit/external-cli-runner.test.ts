@@ -67,6 +67,36 @@ describe("external CLI runner", () => {
 		}
 	});
 
+	it("delivers a multi-line argv script containing empty lines verbatim and runs it", async () => {
+		// Regression shape for issue #77: the sealed-export-loader agent passes a
+		// block-scalar python script as a single argv element; empty lines inside
+		// it must survive frontmatter extraction and argv delivery. The parse side
+		// is pinned in agent-frontmatter.test.ts; this pins the runner side.
+		const dir = tempDir();
+		const script = [
+			"let s = '';",
+			"",
+			"process.stdin.on('data', (c) => s += c);",
+			"",
+			"process.stdin.on('end', () => {",
+			"  const mode = s.includes('MODE=meta') ? 'meta' : 'unknown';",
+			"",
+			"  process.stdout.write(JSON.stringify({ mode }));",
+			"});",
+		].join("\n");
+		const result = await runExternalCli({
+			command: process.execPath,
+			args: ["-e", script],
+			cwd: dir,
+			prompt: "MODE=meta\nFILE=/tmp/whatever",
+			asyncDir: dir,
+			stepIndex: 0,
+		});
+
+		assert.equal(result.exitCode, 0);
+		assert.deepEqual(JSON.parse(result.output), { mode: "meta" });
+	});
+
 	it("delivers the combined prompt only through stdin and preserves argv", async () => {
 		const dir = tempDir();
 		const prompt = buildExternalCliPrompt("Follow exactly.", "Review $HOME; echo nope");
