@@ -4,11 +4,7 @@
 
 ### Fixed
 
-- Agent files with a blank line inside a nested frontmatter block (a key like `runner:` with indented
-  content) no longer have the block silently truncated at that blank line. The lines after the blank are
-  now honored, which means tool allowlists, permissions, acceptance criteria, and memory blocks that were
-  previously cut off at a blank line start using their full content. Literal `|`/`|-` and folded `>`/`>-`
-  block scalars keep their exact previous values, including trailing newlines.
+- Agent files with a blank line inside a nested frontmatter block (a key like `runner:` with indented content) no longer have the block silently truncated at that blank line, so tool allowlists, permissions, acceptance criteria, and memory blocks that were previously cut off at a blank line start using their full content; literal `|`/`|-` and folded `>`/`>-` block scalars keep their exact previous values, including trailing newlines (#3089)
 
 ## [0.83.0] - 2026-10-25
 

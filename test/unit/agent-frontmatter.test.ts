@@ -418,7 +418,7 @@ describe("blank lines in nested frontmatter blocks", () => {
 			"  args:",
 			"    - -e",
 			"    - |",
-			...script.split("\n").map((line) => `      ${line}`),
+			...script.split("\n").map((line) => (line ? `      ${line}` : "")),
 			"async: true",
 			"---",
 			"",
@@ -426,6 +426,24 @@ describe("blank lines in nested frontmatter blocks", () => {
 		const agent = discoverAgents(project, "project").agents.find((item) => item.name === "loader");
 		// `- |` clip-chomps: the delivered arg carries one trailing newline.
 		assert.deepEqual(agent?.runner, { type: "external-cli", command: "node", args: ["-e", `${script}\n`], promptDelivery: "stdin" });
+	}));
+
+	it("honors list items after an exactly-empty line through agent discovery", () => withTempHome(() => {
+		const project = fs.mkdtempSync(path.join(os.tmpdir(), "pi-subagents-blank-list-"));
+		tempDirs.push(project);
+		writeAgent(path.join(project, ".pi", "agents", "tooluser.md"), [
+			"---",
+			"name: tooluser",
+			"description: Tools after a blank line",
+			"tools:",
+			"  - read",
+			"",
+			"  - bash",
+			"---",
+			"",
+		].join("\n"));
+		const agent = discoverAgents(project, "project").agents.find((item) => item.name === "tooluser");
+		assert.deepEqual(agent?.tools, ["read", "bash"]);
 	}));
 });
 
